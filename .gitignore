@@ -1,0 +1,8 @@
+cmd/.env
+
+.exe
+*.out
+*.log
+*.test
+*.mod
+*.sum
