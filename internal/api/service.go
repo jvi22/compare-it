@@ -2,14 +2,15 @@ package api
 
 import (
 	"errors"
-	"log"
 	"os"
+	"sync"
 
 	twilio "github.com/twilio/twilio-go"
 	twilioApi "github.com/twilio/twilio-go/rest/verify/v2"
 )
 
-// Helper functions to fetch environment variables safely
+// ---- Helper functions to safely fetch env vars ----
+
 func envACCOUNTSID() string {
 	val := os.Getenv("TWILIO_ACCOUNT_SID")
 	if val == "" {
@@ -34,17 +35,31 @@ func envSERVICESID() string {
 	return val
 }
 
-var client *twilio.RestClient = twilio.NewRestClientWithParams(twilio.ClientParams{
-	Username: envACCOUNTSID(),
-	Password: envAUTHTOKEN(),
-})
+// ---- Lazy-initialized Twilio client ----
+
+var (
+	client     *twilio.RestClient
+	clientOnce sync.Once
+)
+
+func getTwilioClient() *twilio.RestClient {
+	clientOnce.Do(func() {
+		client = twilio.NewRestClientWithParams(twilio.ClientParams{
+			Username: envACCOUNTSID(),
+			Password: envAUTHTOKEN(),
+		})
+	})
+	return client
+}
+
+// ---- OTP functions ----
 
 func (app *Config) twilioSendOTP(phoneNumber string) (string, error) {
 	params := &twilioApi.CreateVerificationParams{}
 	params.SetTo(phoneNumber)
 	params.SetChannel("sms")
 
-	resp, err := client.VerifyV2.CreateVerification(envSERVICESID(), params)
+	resp, err := getTwilioClient().VerifyV2.CreateVerification(envSERVICESID(), params)
 	if err != nil {
 		return "", err
 	}
@@ -59,7 +74,7 @@ func (app *Config) twilioVerifyOTP(phoneNumber string, code string) error {
 	params.SetTo(phoneNumber)
 	params.SetCode(code)
 
-	resp, err := client.VerifyV2.CreateVerificationCheck(envSERVICESID(), params)
+	resp, err := getTwilioClient().VerifyV2.CreateVerificationCheck(envSERVICESID(), params)
 	if err != nil {
 		return err
 	}
@@ -67,8 +82,4 @@ func (app *Config) twilioVerifyOTP(phoneNumber string, code string) error {
 		return errors.New("not a valid code")
 	}
 	return nil
-}
-
-func init() {
-	log.Println("TWILIO_ACCOUNT_SID:", os.Getenv("TWILIO_ACCOUNT_SID"))
 }
